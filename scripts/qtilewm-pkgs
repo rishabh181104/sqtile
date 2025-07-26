@@ -193,6 +193,7 @@ AUDIO_PACKAGES=(
     alsa-utils
     pulseaudio-alsa
     playerctl
+    pamixer
     mpv
     vlc
 )

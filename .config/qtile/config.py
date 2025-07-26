@@ -39,6 +39,15 @@ keys = [
     Key([mod, "control"], "w", lazy.window.toggle_maximize(), desc="Toggle maximize"),
     Key([mod, "control"], "s", lazy.window.toggle_minimize(), desc="Toggle minimize"),
     Key([mmod, "control"], "l", lazy.spawn("betterlockscreen -l"), desc="Lock screen"),
+    Key([], "XF86AudioRaiseVolume", lazy.spawn("pactl set-sink-volume @DEFAULT_SINK@ +5%")),
+    Key([], "XF86AudioLowerVolume", lazy.spawn("pactl set-sink-volume @DEFAULT_SINK@ -5%")),
+    Key([], "XF86AudioMute", lazy.spawn("pactl set-sink-mute @DEFAULT_SINK@ toggle")),
+    Key([], "XF86AudioPlay", lazy.spawn("playerctl play-pause")),
+    Key([], "XF86AudioNext", lazy.spawn("playerctl next")),
+    Key([], "XF86AudioPrev", lazy.spawn("playerctl previous")),
+    Key([], "XF86MonBrightnessUp", lazy.spawn("brightnessctl set +10%")),
+    Key([], "XF86MonBrightnessDown", lazy.spawn("brightnessctl set 10%-")),
+    Key([], "XF86AudioMedia", lazy.spawn("pavucontrol")),
 
     # Focus and window movement
     Key([mmod], "h", lazy.layout.left(), desc="Focus left"),
