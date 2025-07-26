@@ -199,9 +199,10 @@ screens = [
                 ),
                 widget.Spacer(length=8),
                 widget.Net(
-                    format=" {down} ↓↑ {up}",
-                    foreground=colors[4],  # Accent color
+                    format=" {down:.1f}Mbps ↓↑ {up:.1f}Mbps",
+                    foreground=colors[4],
                     padding=8,
+                    use_bits=True,
                 ),
                 widget.Spacer(length=8),
                 widget.Clock(
