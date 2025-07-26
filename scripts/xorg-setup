@@ -1,0 +1,142 @@
+#!/bin/bash
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root. Please use sudo." >&2
+    exit 1
+fi
+
+# Create Xorg configuration directory
+mkdir -p /etc/X11/xorg.conf.d
+
+# Get display configuration
+echo "╔══════════════════════════════════════════════╗"
+echo "║        Display Configuration Setup           ║"
+echo "╚══════════════════════════════════════════════╝"
+echo ""
+read -p "Enter desired width (default 1920): " width
+width=${width:-1920}
+
+read -p "Enter desired height (default 1080): " height
+height=${height:-1080}
+
+read -p "Enter refresh rate in Hz (default 60): " refresh
+refresh=${refresh:-60}
+
+# Generate modeline
+echo ""
+echo "Generating display mode..."
+modeline=$(cvt "$width" "$height" "$refresh" | grep -v "^#" | cut -d'"' -f3- | sed 's/"//g')
+modename=$(echo "$modeline" | awk '{print $1}')
+
+# Create display configuration
+cat > /etc/X11/xorg.conf.d/20-display.conf << EOF
+Section "Monitor"
+    Identifier     "Monitor0"
+    VendorName     "Generic"
+    ModelName      "Custom"
+    HorizSync       30.0 - 85.0
+    VertRefresh     50.0 - 75.0
+    Option         "DPMS"
+    
+    # $width x $height @ ${refresh}Hz
+    Modeline       "$modename" $modeline
+    Option         "PreferredMode" "$modename"
+EndSection
+
+Section "Screen"
+    Identifier     "Screen0"
+    Device         "Device0"
+    Monitor        "Monitor0"
+    DefaultDepth    24
+    SubSection     "Display"
+        Depth       24
+        Modes      "$modename"
+    EndSubSection
+EndSection
+
+Section "Device"
+    Identifier     "Device0"
+    Driver         "modesetting"
+    Option         "Monitor-HDMI-1" "Monitor0"
+    Option         "Monitor-DP-1" "Monitor0"
+    Option         "Monitor-eDP-1" "Monitor0"
+    # Add other output types as needed
+EndSection
+EOF
+
+# Touchpad configuration
+echo ""
+echo "╔══════════════════════════════════════════════╗"
+echo "║        Touchpad Configuration Setup          ║"
+echo "╚══════════════════════════════════════════════╝"
+echo ""
+read -p "Enable click-on-tap? [y/N]: " enable_tap
+enable_tap=${enable_tap:-n}
+
+if [[ $enable_tap =~ ^[Yy]$ ]]; then
+    echo "Configuring click-on-tap..."
+    cat > /etc/X11/xorg.conf.d/30-touchpad.conf << EOF
+Section "InputClass"
+    Identifier      "libinput touchpad configuration"
+    MatchIsTouchpad "on"
+    MatchDevicePath "/dev/input/event*"
+    Driver          "libinput"
+    
+    # Enable tapping
+    Option          "Tapping"          "on"
+    Option          "TappingDrag"      "on"
+    Option          "TappingDragLock"  "on"
+    Option          "NaturalScrolling" "true"
+    Option          "DisableWhileTyping" "true"
+EndSection
+
+Section "InputClass"
+    Identifier      "synaptics touchpad configuration"
+    MatchIsTouchpad "on"
+    Driver          "synaptics"
+    
+    # Enable tapping
+    Option          "TapButton1"       "1"
+    Option          "TapButton2"       "3"
+    Option          "TapButton3"       "2"
+    Option          "VertEdgeScroll"   "on"
+    Option          "VertTwoFingerScroll" "on"
+    Option          "HorizEdgeScroll"  "on"
+    Option          "HorizTwoFingerScroll" "on"
+    Option          "PalmDetect"       "on"
+EndSection
+EOF
+else
+    echo "Skipping click-on-tap configuration."
+    # Remove any existing touchpad configuration
+    rm -f /etc/X11/xorg.conf.d/30-touchpad.conf
+fi
+
+# Summary
+echo ""
+echo "╔══════════════════════════════════════════════╗"
+echo "║          Configuration Summary               ║"
+echo "╚══════════════════════════════════════════════╝"
+echo ""
+echo "Display configuration:"
+echo "  Resolution: ${width}x${height}"
+echo "  Refresh rate: ${refresh}Hz"
+echo "  Mode name: ${modename}"
+echo ""
+echo "Touchpad configuration:"
+if [[ $enable_tap =~ ^[Yy]$ ]]; then
+    echo "  Click-on-tap: Enabled"
+else
+    echo "  Click-on-tap: Disabled"
+fi
+echo ""
+echo "Configuration files created in /etc/X11/xorg.conf.d:"
+ls -l /etc/X11/xorg.conf.d/*.conf
+echo ""
+echo "Note: Changes will take effect after restarting Xorg or rebooting."
+echo "You can restart your display manager to apply changes immediately."
+echo ""
+echo "To revert changes, simply delete the configuration files:"
+echo "  sudo rm /etc/X11/xorg.conf.d/20-display.conf"
+echo "  sudo rm /etc/X11/xorg.conf.d/30-touchpad.conf"
