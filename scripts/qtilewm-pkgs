@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+# Color variables for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+section() {
+  echo -e "\n${CYAN}${BOLD}==> $1${NC}"
+}
+success() {
+  echo -e "${GREEN}✔ $1${NC}"
+}
+fail() {
+  echo -e "${RED}✖ $1${NC}"
+}
+warn() {
+  echo -e "${YELLOW}! $1${NC}"
+}
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+clear
+
+# Don't run as root
+if [ "$EUID" -eq 0 ]; then
+  fail "Please do not run this script as root."
+  exit 1
+fi
+
+# Function to install paru if not present
+install_paru() {
+  if command_exists paru; then
+    success "paru is already installed"
+    return 0
+  fi
+
+  section "Installing paru AUR helper"
+  warn "paru is not installed. Installing prerequisites and paru..."
+
+  # Install prerequisites with pacman
+  local prerequisites=(git base-devel)
+  local missing_prereqs=()
+
+  for pkg in "${prerequisites[@]}"; do
+    if ! pacman -Q "$pkg" >/dev/null 2>&1; then
+      missing_prereqs+=("$pkg")
+    fi
+  done
+
+  if [ ${#missing_prereqs[@]} -ne 0 ]; then
+    echo "Installing prerequisites: ${missing_prereqs[*]}"
+    sudo pacman -S --needed --noconfirm "${missing_prereqs[@]}" || {
+      fail "Failed to install prerequisites: ${missing_prereqs[*]}"
+      exit 1
+    }
+    success "Prerequisites installed successfully"
+  fi
+
+  # Create temporary directory and install paru
+  local temp_dir=$(mktemp -d)
+  local current_dir=$(pwd)
+
+  cd "$temp_dir" || {
+    fail "Failed to create temporary directory"
+    exit 1
+  }
+
+  echo "Cloning paru repository..."
+  if git clone https://aur.archlinux.org/paru.git; then
+    cd paru || {
+      fail "Failed to enter paru directory"
+      cd "$current_dir"
+      rm -rf "$temp_dir"
+      exit 1
+    }
+
+    echo "Building and installing paru..."
+    if makepkg -si --noconfirm; then
+      success "paru installed successfully"
+      cd "$current_dir"
+      rm -rf "$temp_dir"
+      return 0
+    else
+      fail "Failed to build paru"
+      cd "$current_dir"
+      rm -rf "$temp_dir"
+      exit 1
+    fi
+  else
+    fail "Failed to clone paru repository"
+    cd "$current_dir"
+    rm -rf "$temp_dir"
+    exit 1
+  fi
+}
+
+# Install paru first
+install_paru
+
+section "Updating Package Database"
+paru -Syu --noconfirm || {
+  fail "Failed to update package database."
+  exit 1
+}
+success "Package database updated."
+
+section "Installing Packages"
+warn "This may take a while. Please be patient..."
+# Core Qtile WM packages
+QTILE_CORE_PACKAGES=(
+    qtile
+    python-psutil
+    python-setproctitle
+    python-dbus-fast
+    python-iwlib
+    python-keyring
+    python-xdg
+    python-cairocffi
+    python-xcffib
+    python-xkbcommon
+)
+
+# X11 and display server packages
+X11_PACKAGES=(
+    xorg-server
+    xorg-xinit
+    xorg-xauth
+    xorg-xrandr
+    xorg-xset
+    xorg-xprop
+    xorg-xwininfo
+    xorg-xdpyinfo
+    xorg-xlsfonts
+    xorg-xwayland
+    xdotool
+    wmctrl
+    xclip
+    xsel
+)
+
+# Window management and compositor
+WM_PACKAGES=(
+    picom
+    betterlockscreen
+    i3lock-color
+    xss-lock
+    unclutter
+    autorandr
+)
+
+# Terminal emulators
+TERMINAL_PACKAGES=(
+    ghostty
+    alacritty
+    kitty
+    terminator
+)
+
+# Application launcher and menus
+LAUNCHER_PACKAGES=(
+    rofi-wayland
+)
+
+# Notification system
+NOTIFICATION_PACKAGES=(
+    dunst
+)
+
+# System tray and applets
+SYSTRAY_PACKAGES=(
+    network-manager-applet
+    blueman
+    nm-connection-editor
+    pavucontrol
+    copyq
+    polkit-gnome
+    volumeicon
+)
+
+# Audio and media
+AUDIO_PACKAGES=(
+    jamesdsp-pipewire-bin
+    alsa-utils
+    pulseaudio-alsa
+    playerctl
+    mpv
+    vlc
+)
+
+# Screenshot and screen recording
+SCREEN_PACKAGES=(
+    flameshot
+    maim
+    scrot
+    grim
+    slurp
+    wf-recorder
+    obs-studio
+)
+
+# Wallpaper and theming
+THEME_PACKAGES=(
+    feh
+    python-pywal
+    lxappearance
+    qt5ct
+)
+
+# File managers
+FILE_MANAGER_PACKAGES=(
+    thunar
+    thunar-volman
+    thunar-archive-plugin
+    ranger
+)
+
+# System monitoring and info
+MONITOR_PACKAGES=(
+    lm_sensors
+    htop
+    btop
+)
+
+# Input and gestures
+INPUT_PACKAGES=(
+    libinput
+    libinput-gestures
+    xf86-input-libinput
+    touchegg
+)
+
+# Python libraries for Qtile extensions
+PYTHON_QTILE_PACKAGES=(
+    python-pywal
+    python-bowler
+    python-libcst
+    python-mpd2
+    python-pywayland
+    python-pywlroots
+    python-xkbcommon
+    python-requests
+    python-psutil
+    python-netifaces
+    python-pillow
+    python-dateutil
+)
+
+# Development and text editors
+EDITOR_PACKAGES=(
+    neovim
+)
+
+# Network and connectivity
+NETWORK_PACKAGES=(
+    networkmanager
+    wpa_supplicant
+    dhcpcd
+    iwd
+    wireless_tools
+    bluez
+    bluez-utils
+)
+
+# Additional utilities for Qtile workflow
+UTILITY_PACKAGES=(
+    redshift
+    gammastep
+    caffeine-ng
+    autokey
+    keepassxc
+)
+
+# Install packages by category
+install_package_group() {
+  local group_name="$1"
+  shift
+  local packages=("$@")
+
+  echo -e "\n${BLUE}Installing $group_name...${NC}"
+  if paru -S --needed --noconfirm "${packages[@]}"; then
+    success "$group_name installed successfully"
+  else
+    fail "Failed to install $group_name"
+    return 1
+  fi
+}
+
+# Install all package groups
+install_package_group "Qtile Core" "${QTILE_CORE_PACKAGES[@]}"
+install_package_group "X11 Display Server" "${X11_PACKAGES[@]}"
+install_package_group "Window Management" "${WM_PACKAGES[@]}"
+install_package_group "Terminal Emulators" "${TERMINAL_PACKAGES[@]}"
+install_package_group "Application Launchers" "${LAUNCHER_PACKAGES[@]}"
+install_package_group "Notifications" "${NOTIFICATION_PACKAGES[@]}"
+install_package_group "System Tray" "${SYSTRAY_PACKAGES[@]}"
+install_package_group "Audio & Media" "${AUDIO_PACKAGES[@]}"
+install_package_group "Screenshots" "${SCREEN_PACKAGES[@]}"
+install_package_group "Theming" "${THEME_PACKAGES[@]}"
+install_package_group "File Managers" "${FILE_MANAGER_PACKAGES[@]}"
+install_package_group "System Monitoring" "${MONITOR_PACKAGES[@]}"
+install_package_group "Input & Gestures" "${INPUT_PACKAGES[@]}"
+install_package_group "Python Qtile Extensions" "${PYTHON_QTILE_PACKAGES[@]}"
+install_package_group "Text Editors" "${EDITOR_PACKAGES[@]}"
+install_package_group "Network" "${NETWORK_PACKAGES[@]}"
+install_package_group "Utilities" "${UTILITY_PACKAGES[@]}"
+
+section "Done!"
+echo -e "${GREEN}${BOLD}Your system is now ready to rock! 🚀${NC}"
+echo -e "${PURPLE}Thank you for using sqtile!${NC}"
+echo ""
+echo "Summary of changes made:"
+echo "• Installed paru AUR helper (if not present)"
+echo "• Updated package database"
+echo "• Installed packages grouped by category:"
+echo "  - Qtile packages"

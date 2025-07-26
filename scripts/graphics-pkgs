@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "This script requires sudo privileges. Re-running with sudo..."
+  # Using sudo with absolute path to ensure it works properly
+  sudo "$(readlink -f "$0")" "$@"
+  exit $?
+fi
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to add environment variables to shell config
+add_env_vars() {
+    local shell_config="$1"
+    local shell_name="$2"
+    
+    if [[ ! -f "$shell_config" ]]; then
+        print_warning "$shell_config not found, creating it..."
+        touch "$shell_config"
+    fi
+    
+    print_status "Adding environment variables to $shell_name config..."
+    
+    # Environment variables to add
+    local env_vars=(
+        "export __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1"
+        "export __GL_THREADED_OPTIMIZATIONS=1" 
+        "export DXVK_HUD=fps"
+        "export MANGOHUD=1"
+        "export LIBVA_DRIVER_NAME=nvidia"
+        "export VDPAU_DRIVER=nvidia"
+    )
+    
+    local added_count=0
+    for var in "${env_vars[@]}"; do
+        if ! grep -Fxq "$var" "$shell_config"; then
+            echo "$var" >> "$shell_config"
+            ((added_count++))
+        fi
+    done
+    
+    if [[ $added_count -gt 0 ]]; then
+        print_success "Added $added_count new environment variables to $shell_name"
+    else
+        print_success "All environment variables already present in $shell_name"
+    fi
+}
+
+# Function to install packages with error handling
+install_packages() {
+    local manager="$1"
+    local category="$2"
+    shift 2
+    local packages=("$@")
+    
+    print_status "Installing $category packages using $manager..."
+    
+    if [[ "$manager" == "pacman" ]]; then
+        if sudo pacman -S --needed --noconfirm "${packages[@]}"; then
+            print_success "$category packages installed successfully"
+        else
+            print_error "Failed to install some $category packages"
+            exit 1
+        fi
+    elif [[ "$manager" == "paru" ]]; then
+        if paru -S --needed --noconfirm "${packages[@]}"; then
+            print_success "$category packages installed successfully"
+        else
+            print_error "Failed to install some $category packages"
+            exit 1
+        fi
+    fi
+}
+
+# Main script execution
+print_status "Starting system setup with enhanced error handling..."
+
+echo
+print_status "==== INSTALLING GRAPHICS & SYSTEM DRIVERS ===="
+install_packages "pacman" "Graphics & System" \
+    mesa lib32-mesa \
+    vulkan-intel lib32-vulkan-intel \
+    intel-media-driver \
+    nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings \
+    nvidia-prime
+
+echo
+print_status "==== INSTALLING AUDIO & MEDIA PACKAGES ===="
+install_packages "pacman" "Audio & Media" \
+    pipewire pipewire-pulse pipewire-alsa pipewire-jack lib32-pipewire \
+    gstreamer gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav \
+    ffmpeg \
+    libva-intel-driver libva-nvidia-driver libvdpau-va-gl
+
+echo
+print_status "==== INSTALLING GAMING & WINE PACKAGES ===="
+install_packages "pacman" "Gaming & Wine" \
+    steam lutris \
+    wine-staging winetricks \
+    gamemode lib32-gamemode \
+    mangohud goverlay gamescope
+
+echo  
+print_status "==== INSTALLING 32-BIT LIBRARIES ===="
+install_packages "pacman" "32-bit Libraries" \
+    lib32-gnutls lib32-libldap lib32-libgpg-error \
+    lib32-sqlite lib32-libpulse
+
+echo
+print_status "==== INSTALLING AUR PACKAGES ===="
+# Check if paru is installed
+if ! command -v paru &> /dev/null; then
+    print_error "paru AUR helper not found! Please install paru first."
+    exit 1
+fi
+
+# GPU Management
+install_packages "paru" "GPU Management" \
+    optimus-manager optimus-manager-qt gwe bbswitch
+
+# Media & Codecs
+install_packages "paru" "Media & Codecs" \
+    gst-plugins-ugly libdvdcss \
+    unrar p7zip-gui
+
+# Applications
+install_packages "paru" "Applications" \
+    spotify
+
+# Hardware Drivers (optional - only install if you have the hardware)
+print_status "Installing hardware-specific drivers (will skip if not needed)..."
+paru -S --needed --noconfirm brother-hll2340dw epson-inkjet-printer-escpr broadcom-wl-dkms gamemode-git || print_warning "Some hardware-specific drivers failed to install (this is normal if you don't have that hardware)"
+
+echo
+print_status "==== ENABLING SYSTEM SERVICES ===="
+print_status "Enabling optimus-manager service..."
+sudo systemctl enable optimus-manager
+
+print_status "Enabling audio services..."
+sudo systemctl --user enable pipewire pipewire-pulse 2>/dev/null || print_warning "Pipewire user services may already be enabled"
+
+print_success "Services enabled successfully"
+
+echo
+print_status "==== CONFIGURING SHELL ENVIRONMENTS ===="
+
+# Add environment variables to both bash and zsh if they exist
+if [[ -n "${BASH_VERSION:-}" ]] || [[ -f "$HOME/.bashrc" ]]; then
+    add_env_vars "$HOME/.bashrc" "bash"
+fi
+
+if command -v zsh &> /dev/null || [[ -f "$HOME/.zshrc" ]]; then
+    add_env_vars "$HOME/.zshrc" "zsh" 
+fi
+
+echo
+print_success "==== SETUP COMPLETED SUCCESSFULLY ===="
+print_status "Please reboot your system to ensure all drivers and services are properly loaded."
+print_status "After reboot, you can use 'optimus-manager --switch nvidia' or the GUI to switch GPU modes."
+print_status "Environment variables will be available after restarting your terminal or running 'source ~/.bashrc' or 'source ~/.zshrc'"
+
+echo
+print_status "Quick verification commands after reboot:"
+echo "  - Check NVIDIA: nvidia-smi"
+echo "  - Check Intel: intel_gpu_top"  
+echo "  - Check audio: pactl info"
+echo "  - Test GPU switching: optimus-manager --status"

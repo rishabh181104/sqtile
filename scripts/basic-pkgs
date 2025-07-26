@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+
+# Exit on error
+set -e
+
+# Color variables for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+section() {
+  echo -e "\n${CYAN}${BOLD}==> $1${NC}"
+}
+success() {
+  echo -e "${GREEN}✔ $1${NC}"
+}
+fail() {
+  echo -e "${RED}✖ $1${NC}"
+}
+warn() {
+  echo -e "${YELLOW}! $1${NC}"
+}
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+clear
+
+# Don't run as root
+if [ "$EUID" -eq 0 ]; then
+  fail "Please do not run this script as root."
+  exit 1
+fi
+
+# Function to install paru if not present
+install_paru() {
+  if command_exists paru; then
+    success "paru is already installed"
+    return 0
+  fi
+
+  section "Installing paru AUR helper"
+  warn "paru is not installed. Installing prerequisites and paru..."
+
+  # Install prerequisites with pacman
+  local prerequisites=(git base-devel)
+  local missing_prereqs=()
+
+  for pkg in "${prerequisites[@]}"; do
+    if ! pacman -Q "$pkg" >/dev/null 2>&1; then
+      missing_prereqs+=("$pkg")
+    fi
+  done
+
+  if [ ${#missing_prereqs[@]} -ne 0 ]; then
+    echo "Installing prerequisites: ${missing_prereqs[*]}"
+    sudo pacman -S --needed --noconfirm "${missing_prereqs[@]}" || {
+      fail "Failed to install prerequisites: ${missing_prereqs[*]}"
+      exit 1
+    }
+    success "Prerequisites installed successfully"
+  fi
+
+  # Create temporary directory and install paru
+  local temp_dir=$(mktemp -d)
+  local current_dir=$(pwd)
+
+  cd "$temp_dir" || {
+    fail "Failed to create temporary directory"
+    exit 1
+  }
+
+  echo "Cloning paru repository..."
+  if git clone https://aur.archlinux.org/paru.git; then
+    cd paru || {
+      fail "Failed to enter paru directory"
+      cd "$current_dir"
+      rm -rf "$temp_dir"
+      exit 1
+    }
+
+    echo "Building and installing paru..."
+    if makepkg -si --noconfirm; then
+      success "paru installed successfully"
+      cd "$current_dir"
+      rm -rf "$temp_dir"
+      return 0
+    else
+      fail "Failed to build paru"
+      cd "$current_dir"
+      rm -rf "$temp_dir"
+      exit 1
+    fi
+  else
+    fail "Failed to clone paru repository"
+    cd "$current_dir"
+    rm -rf "$temp_dir"
+    exit 1
+  fi
+}
+
+# Install paru first
+install_paru
+
+section "Updating Package Database"
+paru -Syu --noconfirm || {
+  fail "Failed to update package database."
+  exit 1
+}
+success "Package database updated."
+
+section "Installing Packages"
+warn "This may take a while. Please be patient..."
+# System utilities and hardware support
+SYSTEM_PACKAGES=(
+  networkmanager
+  network-manager-applet
+  blueman
+  bluez
+  bluez-utils
+  brightnessctl
+  pavucontrol
+  acl
+  alsa-utils
+  alsa-plugins
+  alsa-lib
+  pipewire
+  pipewire-pulse
+  pipewire-alsa
+  pipewire-jack
+  lib32-pipewire
+  pulseaudio-alsa
+  lib32-libpulse
+  pciutils
+  usbutils
+  hwdata
+  lshw
+  upower
+  accountsservice
+  polkit
+  dbus
+  udisks2
+  gvfs
+)
+
+TERMINAL_PACKAGES=(
+  neovim
+  vim
+  tmux
+  zsh
+  bash
+  fzf
+  zoxide
+  ripgrep
+  bat
+  btop
+  htop
+  tree
+  less
+  grep
+  sed
+  awk
+  which
+  curl
+  wget
+  rsync
+  unzip
+  zip
+  tar
+  gzip
+  p7zip
+  lazygit
+  man-db
+  texinfo
+)
+
+GUI_PACKAGES=(
+  libreoffice-fresh
+  vlc
+  mpv
+)
+
+DEV_PACKAGES=(
+  git
+  github-cli
+  rustup
+  go
+  nodejs-lts-iron
+  npm
+  python
+  python-pip
+  python-setuptools
+  python-wheel
+  python-virtualenv
+  base-devel
+  gcc
+  make
+  cmake
+  autoconf
+  automake
+  pkg-config
+  stow
+)
+
+THEME_PACKAGES=(
+  ttf-font-awesome
+  powerline-fonts
+  nitch
+  lxappearance
+)
+
+SECURITY_PACKAGES=(
+  sbctl
+  mokutil
+  openssl
+  openssh
+  gnupg
+  pass
+  keepassxc
+)
+
+KERNEL_PACKAGES=(
+  linux
+  linux-headers
+  linux-firmware
+  mkinitcpio
+  dkms
+  base
+  filesystem
+  glibc
+  systemd
+)
+
+UTILITY_PACKAGES=(
+  bc
+  xclip
+  wl-clipboard
+  python-adblock
+  reflector-simple
+  xdg-utils
+  xdg-user-dirs
+  xdg-desktop-portal
+  mesa-utils
+  vulkan-tools
+  glxinfo
+  inxi
+  imagemagick
+  ffmpeg
+  yt-dlp
+  qbittorrent
+)
+
+# Install packages by category
+install_package_group() {
+  local group_name="$1"
+  shift
+  local packages=("$@")
+
+  echo -e "\n${BLUE}Installing $group_name...${NC}"
+  if paru -S --needed --noconfirm "${packages[@]}"; then
+    success "$group_name installed successfully"
+  else
+    fail "Failed to install $group_name"
+    return 1
+  fi
+}
+
+# Install all package groups
+install_package_group "System utilities" "${SYSTEM_PACKAGES[@]}"
+install_package_group "Terminal and editors" "${TERMINAL_PACKAGES[@]}"
+install_package_group "GUI applications" "${GUI_PACKAGES[@]}"
+install_package_group "Development tools" "${DEV_PACKAGES[@]}"
+install_package_group "Themes and appearance" "${THEME_PACKAGES[@]}"
+install_package_group "Security packages" "${SECURITY_PACKAGES[@]}"
+install_package_group "Kernel packages" "${KERNEL_PACKAGES[@]}"
+install_package_group "Utility packages" "${UTILITY_PACKAGES[@]}"
+
+section "Done!"
+echo -e "${GREEN}${BOLD}Your system is now ready to rock! 🚀${NC}"
+echo -e "${PURPLE}Thank you for using sdots!${NC}"
+echo ""
+echo "Summary of changes made:"
+echo "• Installed paru AUR helper (if not present)"
+echo "• Updated package database"
+echo "• Installed packages grouped by category:"
+echo "  - System utilities and GUI applications"
+echo "  - Development tools and terminal applications"
+echo "  - Themes, fonts, and appearance packages"
+echo "  - Security and kernel packages"
+echo ""
+echo "Next steps:"
+echo "1. Reboot your system if kernel packages were updated"
+echo "2. Configure Hyprland with your dotfiles"
+echo "3. Set up your preferred shell (zsh recommended)"
+echo "4. Configure development tools (rustup, nodejs, etc.)"
+echo "5. All scripts in ~/.local/bin are now available system-wide"
