@@ -79,7 +79,7 @@ fi
 success "Secure Boot status verified."
 
 section "Installing required packages"
-paru -S --needed --noconfirm sbctl mokutil openssl linux-headers refind || {
+paru -S --needed --noconfirm sbctl mokutil openssl linux-headers || {
   fail "Failed to install required packages."
   exit 1
 }
@@ -139,12 +139,11 @@ Operation = Install
 Operation = Upgrade
 Type = Package
 Target = linux
-Target = refind
 
 [Action]
 Description = Signing kernel and bootloader for Secure Boot...
 When = PostTransaction
-Exec = /usr/bin/sbctl sign -s /boot/EFI/refind/refind_x64.efi -s /boot/EFI/Linux/arch-linux.efi
+Exec = /usr/bin/sbctl sign -s /boot/EFI/Linux/arch-linux.efi
 EOF
 success "Pacman hooks configured."
 
