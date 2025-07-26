@@ -2,7 +2,8 @@
 --ignore=.stowrc
 --ignore=screenshots
 --ignore=scripts
---ignore=pacman
+--ignore=pacman.conf
+--ignore=ricing-pacman.txt
 --ignore=README
 --ignore=LICENSE
 --ignore=.git
