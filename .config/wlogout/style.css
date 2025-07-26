@@ -5,7 +5,7 @@
 window {
   font-size: 24pt;
   color: @foreground; /* Text color from pywal */
-  background-color: rgba(30, 30, 46, 0.8); /* Semi-transparent dark background */
+  background-color: rgba(0, 0, 0, 0); /* Semi-transparent dark background */
 }
 
 /* Button base styling - Common styling for all power menu buttons */
